@@ -1,82 +1,77 @@
 import streamlit as st
-from streamlit_extras.stylable_container import stylable_container
+from streamlit_gsheets import GSheetsConnection
+import pandas as pd
 
-# --- 頁面設定 ---
-st.set_page_config(page_title="民眾用藥習慣調查", page_icon="💊", layout="centered")
+# --- 1. 頁面基本設定 ---
+st.set_page_config(page_title="一般民眾用藥習慣調查", page_icon="💊")
 
-# --- 自定義 CSS (讓介面更像 Netlify 範例) ---
-st.markdown("""
-    <style>
-    .stButton>button {
-        width: 100%;
-        border-radius: 15px;
-        height: 3em;
-        font-size: 1.2rem;
-        transition: all 0.3s;
-    }
-    .stProgress > div > div > div > div {
-        background-color: #4CAF50;
-    }
-    .question-text {
-        font-size: 1.8rem;
-        font-weight: 600;
-        margin-bottom: 1.5rem;
-        color: #2E4053;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+# --- 2. 建立連線 (直接指定網址，確保路徑正確) ---
+# 這是你剛才提供的試算表網址
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1MkdJGPHdAJC9fK5ufExy3UJlj-yvsZeXYEjcjXqWjVQ/edit"
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- 問卷題目邏輯 ---
-questions = [
-    {"q": "您的年齡層是？", "options": ["20歲以下", "20-40歲", "41-60歲", "61歲以上"]},
-    {"q": "您目前是否有長期服用慢性病藥物？", "options": ["是", "否"]},
-    {"q": "藥瓶內的棉花和乾燥劑，開瓶後應該...", "options": ["繼續留在瓶子裡", "立刻丟掉"]},
-    {"q": "忘記吃藥時，下次吃藥可以吃兩倍劑量嗎？", "options": ["可以", "不可以"]},
-    {"q": "過期的感冒藥水，可以直接沖入馬桶嗎？", "options": ["可以", "不可以"]},
-    {"q": "當症狀好轉，您會自行停藥嗎？", "options": ["從不", "偶爾", "經常", "總是"]},
-    {"q": "對於家中不需要的藥，您通常怎麼處理？", "options": ["直接丟垃圾桶", "送回藥局", "藥物回收六步驟"]},
-]
-
-# --- 初始化 Session State (紀錄進度) ---
+# --- 3. 初始化問卷狀態 ---
 if 'step' not in st.session_state:
     st.session_state.step = 0
 if 'answers' not in st.session_state:
     st.session_state.answers = []
 
-# --- 介面呈現 ---
-num_questions = len(questions)
-progress = st.session_state.step / num_questions
+# 問卷題目內容
+questions = [
+    {"q": "您的年齡層是？", "opts": ["20歲以下", "20-40歲", "41-60歲", "61歲以上"]},
+    {"q": "您目前是否有長期服用慢性病藥物？", "opts": ["是", "否"]},
+    {"q": "藥瓶內的棉花和乾燥劑，開瓶後應該...", "opts": ["繼續留在瓶子裡", "立刻丟掉"]},
+    {"q": "忘記吃藥時，下次吃藥可以吃兩倍劑量嗎？", "opts": ["可以", "不可以"]},
+    {"q": "過期的感冒藥水，可以直接沖入馬桶嗎？", "opts": ["可以", "不可以"]},
+    {"q": "當症狀好轉，您會自行停藥嗎？", "opts": ["從不", "偶爾", "經常", "總是"]},
+    {"q": "您會定期檢查家中藥櫃並清理過期藥嗎？", "opts": ["從不", "偶爾", "經常", "總是"]}
+]
 
-if st.session_state.step < num_questions:
-    # 顯示進度條
-    st.progress(progress)
-    st.write(f"問題 {st.session_state.step + 1} / {num_questions}")
+# --- 4. 問卷介面邏輯 ---
+if st.session_state.step < len(questions):
+    # 顯示進度
+    progress_value = st.session_state.step / len(questions)
+    st.progress(progress_value)
+    st.write(f"進度：{st.session_state.step + 1} / {len(questions)}")
     
     current_q = questions[st.session_state.step]
+    st.markdown(f"### {current_q['q']}")
     
-    # 顯示問題標題
-    st.markdown(f"<p class='question-text'>{current_q['q']}</p>", unsafe_allow_html=True)
-    
-    # 使用按鈕選擇答案 (點擊即跳下一題)
-    for option in current_q['options']:
-        if st.button(option):
-            st.session_state.answers.append(option)
+    # 選項按鈕
+    for opt in current_q['opts']:
+        if st.button(opt, use_container_width=True):
+            st.session_state.answers.append(opt)
             st.session_state.step += 1
             st.rerun()
 
+# --- 5. 填寫完成與資料寫入 ---
 else:
-    # --- 填寫完成畫面 ---
     st.balloons()
-    st.success("🎉 感謝您的填寫！您的回覆已成功記錄。")
-    st.markdown("### 您的用藥認知小回饋：")
+    st.success("🎉 感謝填寫！資料正在同步至雲端試算表...")
     
-    # 這裡可以根據回答顯示衛教資訊
-    if st.session_state.answers[2] == "繼續留在瓶子裡":
-        st.warning("💡 小提醒：乾燥劑開瓶後會吸濕，建議丟掉以免滋生細菌喔！")
-    else:
-        st.info("✅ 專業！開瓶後丟棄棉花與乾燥劑是正確的。")
+    try:
+        # 讀取現有資料 (明確指定網址)
+        existing_data = conn.read(spreadsheet=SHEET_URL)
+        
+        # 準備標題與新資料
+        columns = ["年齡", "慢性病", "乾燥劑", "兩倍劑量", "回收認知", "自行停藥", "清理頻率"]
+        new_row = pd.DataFrame([st.session_state.answers], columns=columns)
+        
+        # 合併資料
+        if existing_data.empty:
+            updated_df = new_row
+        else:
+            updated_df = pd.concat([existing_data, new_row], ignore_index=True)
+        
+        # 寫回 Google Sheets
+        conn.update(spreadsheet=SHEET_URL, data=updated_df)
+        st.info("✅ 雲端同步完成！")
+        
+    except Exception as e:
+        st.error(f"儲存時發生錯誤：{e}")
+        st.warning("請確認您已在 Secrets 填寫連線設定，並將 s-connection@streamlit.io 設為編輯者。")
 
-    if st.button("重新填寫"):
+    if st.button("重新填寫問卷"):
         st.session_state.step = 0
         st.session_state.answers = []
         st.rerun()
